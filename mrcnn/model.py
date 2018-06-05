@@ -2430,7 +2430,6 @@ class MaskRCNN():
             full_masks.append(full_mask)
         full_masks = np.stack(full_masks, axis=-1)\
             if full_masks else np.empty(masks.shape[1:3] + (0,))
-
         return boxes, class_ids, scores, full_masks
 
     def detect(self, images, verbose=0):
