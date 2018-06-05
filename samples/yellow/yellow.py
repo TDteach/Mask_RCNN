@@ -98,7 +98,13 @@ class XHTConfig(Config):
     LOSS_WEIGHTS = {
         "class_loss": 1.
     }
-    TRAIN_BN = True
+    """
+    Note about training values:
+        None: Train BN layers. This is the normal mode
+        False: Freeze BN layers. Good when batch size is small
+        True: (don't use). Set layer in training mode even when inferencing
+    """
+    TRAIN_BN = None
     VALIDATION_STEPS = 50
 
 
