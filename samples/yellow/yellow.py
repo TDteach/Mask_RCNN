@@ -1,5 +1,5 @@
 """
-Mask R-CNN
+ResNet50 to detect yellow image based on the output of Mask R-CNN
 Configurations and data loading code for yellowset.
 
 Copyright (c) 2017 Matterport, Inc.
@@ -11,20 +11,17 @@ Written by TDteach
 Usage: import the module (see Jupyter notebooks for examples), or run from
        the command line as such:
 
-    # Train a new model starting from pre-trained COCO weights
-    python3 coco.py train --dataset=/path/to/coco/ --model=coco
-
-    # Train a new model starting from ImageNet weights. Also auto download COCO dataset
-    python3 coco.py train --dataset=/path/to/coco/ --model=imagenet --download=True
+    # Train a new model
+    python3 yellow.py train --dataset=/path/to/yellowset/ --model=new
 
     # Continue training a model that you had trained earlier
-    python3 coco.py train --dataset=/path/to/coco/ --model=/path/to/weights.h5
+    python3 yellow.py train --dataset=/path/to/yellowset/ --model=/path/to/weights.h5
 
     # Continue training the last model you trained
-    python3 coco.py train --dataset=/path/to/coco/ --model=last
+    python3 yellow.py train --dataset=/path/to/yellowset/ --model=last
 
-    # Run COCO evaluatoin on the last model you trained
-    python3 coco.py evaluate --dataset=/path/to/coco/ --model=last
+    # Run XHT evaluatoin on the last model you trained
+    python3 yellow.py evaluate --dataset=/path/to/yellowset/ --model=last
 """
 
 import os
@@ -83,10 +80,10 @@ class XHTConfig(Config):
 
     # We use a GPU with 12GB memory, which can fit two images.
     # Adjust down if you use a smaller GPU.
-    IMAGES_PER_GPU = 32
+    IMAGES_PER_GPU = 1
 
     # Uncomment to train on 8 GPUs (default is 1)
-    # GPU_COUNT = 8
+    GPU_COUNT = 1
 
     # Number of classes (including background)
     NUM_CLASSES = 2  # XHT has 2 classes: white & yellow
@@ -392,7 +389,7 @@ class ResNet50(modellib.MaskRCNN):
             class_logits = KL.Dense(2, activation='softmax', name='class_logits')(x)
             class_loss = KL.Lambda(lambda x: class_loss_graph(*x), name="class_loss")(
                 [input_gt_class_ids, class_logits])
-            model = KM.Model([input_image, input_gt_class_ids], [class_logits, class_loss], name='resnet50')
+            model = KM.Model([input_image, input_gt_class_ids], [class_loss], name='resnet50')
         else:
             y = KL.Dense(2, activation='softmax')(P6)
             model = KM.Model([input_image], [y], name='resnet50')
@@ -523,7 +520,7 @@ class ResNet50(modellib.MaskRCNN):
             assert g.shape == image_shape,\
                 "After resizing, all images must have the same size. Check IMAGE_RESIZE_MODE and image sizes."
 
-
+        molded_images = np.asarray(molded_images)
         if verbose:
             log("molded_images", molded_images)
         # Run object detection
@@ -531,7 +528,7 @@ class ResNet50(modellib.MaskRCNN):
         # Process detections
         results = []
         for i, image in enumerate(images):
-            results.append(y[i][1])
+            results.append(y[i][0][0][1])
         return results
 
     def compile(self, learning_rate, momentum):
@@ -760,3 +757,19 @@ if __name__ == '__main__':
     else:
         print("'{}' is not recognized. "
               "Use 'train' or 'evaluate'".format(args.command))
+
+
+# URL from which to download the latest COCO trained weights
+XHT_MODEL_URL = "https://github.com/TDteach/Mask_RCNN/releases/download/yellow/resnet50_yellow.h5"
+
+def download_yellow_weights(xht_model_path, verbose=1):
+    """Download COCO trained weights from Releases.
+
+    coco_model_path: local path of COCO trained weights
+    """
+    if verbose > 0:
+        print("Downloading pretrained model to " + xht_model_path + " ...")
+    with urllib.request.urlopen(XHT_MODEL_URL) as resp, open(xht_model_path, 'wb') as out:
+        shutil.copyfileobj(resp, out)
+    if verbose > 0:
+        print("... done downloading pretrained model!")
