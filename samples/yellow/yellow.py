@@ -39,9 +39,9 @@ import logging
 import tensorflow as tf
 import keras
 import keras.backend as K
-# tfconfig = tf.ConfigProto(allow_soft_placement=True)
-# tfconfig.gpu_options.allow_growth = True
-# sess = tf.Session(config=tfconfig)
+tfconfig = tf.ConfigProto(allow_soft_placement=True)
+tfconfig.gpu_options.allow_growth = True
+sess = tf.Session(config=tfconfig)
 # K.set_session(sess)
 import keras.layers as KL
 import keras.engine as KE
