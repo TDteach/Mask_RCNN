@@ -39,10 +39,10 @@ import logging
 import tensorflow as tf
 import keras
 import keras.backend as K
-tfconfig = tf.ConfigProto(allow_soft_placement=True)
-tfconfig.gpu_options.allow_growth = True
-sess = tf.Session(config=tfconfig)
-K.set_session(sess)
+# tfconfig = tf.ConfigProto(allow_soft_placement=True)
+# tfconfig.gpu_options.allow_growth = True
+# sess = tf.Session(config=tfconfig)
+# K.set_session(sess)
 import keras.layers as KL
 import keras.engine as KE
 import keras.models as KM
@@ -386,12 +386,13 @@ class ResNet50(modellib.MaskRCNN):
 
         if mode == "training":
             x = KL.Dropout(rate=0.5)(P6)
-            class_logits = KL.Dense(2, activation='softmax', name='class_logits')(x)
+            # class_logits = KL.Dense(2, activation='softmax', name='class_logits')(x)
+            class_logits = KL.Dense(2, name='class_logits')(x)
             class_loss = KL.Lambda(lambda x: class_loss_graph(*x), name="class_loss")(
                 [input_gt_class_ids, class_logits])
             model = KM.Model([input_image, input_gt_class_ids], [class_loss], name='resnet50')
         else:
-            y = KL.Dense(2, activation='softmax')(P6)
+            y = KL.Dense(2, activation='softmax', name='class_logits')(P6)
             model = KM.Model([input_image], [y], name='resnet50')
 
 
