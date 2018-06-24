@@ -88,21 +88,21 @@ def write_to_bin(data, fname):
     bd = pickle.dumps(data)
     f.write(bd)
 
-person_thr = 0.8
-prefix = 'porno_imgs.bin'
-root='/home/tdteach/data/yellowset/images/porno/'
-#folders = read_from_json('/home/tdteach/data/sexy.json')
-folders = os.listdir(root)
-nf = 2
+person_thr = 0.90
+prefix = 'man_imgs.bin'
+root='/home/tdteach/data/thumbnails_features_deduped_publish/'
+folders = read_from_json('/home/tdteach/data/sexy.json')
+#folders = os.listdir(root)
+nf = 0
 zz = 0
 data = dict()
 feed = []
 for fo in folders:
     if '.' in fo:
       continue
-    #if folders[fo] == 'male':
-    #    print('male')
-    #    continue
+    if folders[fo] == 'female':
+        print('female')
+        continue
     try:
       fo_path = os.path.join(root,fo)
     except NotADirectoryError:
@@ -120,8 +120,8 @@ for fo in folders:
                 continue
             #print(shape)
             zz += 1
-            if (zz <= 10000):
-                continue
+            #if (zz <= 10000):
+            #    continue
             feed.append(img)
             if len(feed) == BATCH_SIZE:
               results = model.detect(feed, verbose=0)

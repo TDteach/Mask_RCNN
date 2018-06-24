@@ -761,7 +761,7 @@ if __name__ == '__main__':
 
 
 # URL from which to download the latest COCO trained weights
-XHT_MODEL_URL = "https://github.com/TDteach/Mask_RCNN/releases/download/yellow/resnet50_yellow.h5"
+XHT_MODEL_URL = "https://github.com/TDteach/Mask_RCNN/releases/download/yellow/resnet50_yellow_v2.h5"
 
 def download_yellow_weights(xht_model_path, verbose=1):
     """Download COCO trained weights from Releases.
