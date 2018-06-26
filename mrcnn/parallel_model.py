@@ -99,6 +99,8 @@ class ParallelModel(KM.Model):
                     m = KL.Lambda(lambda o: tf.add_n(o) / len(outputs), name=name)(outputs)
                 else:
                     # Concatenate
+                    # keras version should be frezon on 2.1.2,
+                    # otherwise this line will be wrong.
                     m = KL.Concatenate(axis=0, name=name)(outputs)
                 merged.append(m)
         return merged

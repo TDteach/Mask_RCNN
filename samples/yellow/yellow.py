@@ -1,5 +1,5 @@
 """
-Mask R-CNN
+ResNet50 to detect yellow image based on the output of Mask R-CNN
 Configurations and data loading code for yellowset.
 
 Copyright (c) 2017 Matterport, Inc.
@@ -11,20 +11,17 @@ Written by TDteach
 Usage: import the module (see Jupyter notebooks for examples), or run from
        the command line as such:
 
-    # Train a new model starting from pre-trained COCO weights
-    python3 coco.py train --dataset=/path/to/coco/ --model=coco
-
-    # Train a new model starting from ImageNet weights. Also auto download COCO dataset
-    python3 coco.py train --dataset=/path/to/coco/ --model=imagenet --download=True
+    # Train a new model
+    python3 yellow.py train --dataset=/path/to/yellowset/ --model=new
 
     # Continue training a model that you had trained earlier
-    python3 coco.py train --dataset=/path/to/coco/ --model=/path/to/weights.h5
+    python3 yellow.py train --dataset=/path/to/yellowset/ --model=/path/to/weights.h5
 
     # Continue training the last model you trained
-    python3 coco.py train --dataset=/path/to/coco/ --model=last
+    python3 yellow.py train --dataset=/path/to/yellowset/ --model=last
 
-    # Run COCO evaluatoin on the last model you trained
-    python3 coco.py evaluate --dataset=/path/to/coco/ --model=last
+    # Run XHT evaluatoin on the last model you trained
+    python3 yellow.py evaluate --dataset=/path/to/yellowset/ --model=last
 """
 
 import os
@@ -42,13 +39,14 @@ import logging
 import tensorflow as tf
 import keras
 import keras.backend as K
-import keras.layers as KL
-import keras.engine as KE
-import keras.models as KM
 tfconfig = tf.ConfigProto(allow_soft_placement=True)
 tfconfig.gpu_options.allow_growth = True
 sess = tf.Session(config=tfconfig)
 K.set_session(sess)
+# K.set_session(sess)
+import keras.layers as KL
+import keras.engine as KE
+import keras.models as KM
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
@@ -168,22 +166,46 @@ class XHTDataset(utils.Dataset):
     def load_xht(self, bin_list, subset):
         """Load a subset of the COCO dataset.
         dataset_dir: The root directory of the COCO dataset.
-    subset: What to load (train, val, minival, valminusminival)
+        subset: What to load (train, val, minival, valminusminival)
         """
-        for fn in bin_list:
-            print('loading '+fn)
-            data = read_from_bin(fn)
+        random.shuffle(bin_list)
+        self.bin_list = bin_list
+        self.k_bin = 0
+        self._feed_buffer()
+
+
+        # for fn in bin_list:
+        #     data = read_from_bin(fn)
+        #     self.image_info.extend(data)
+    def _feed_buffer(self):
+        self.image_info = []
+        while len(self.image_info) < 30000:
+            data = read_from_bin(self.bin_list[self.k_bin])
             self.image_info.extend(data)
+            self.k_bin += 1
+            if self.k_bin >= len(self.bin_list):
+                random.shuffle(self.bin_list)
+                self.k_bin = 0
+        self._k_image = 0
+        self._idx = np.arange(len(self.image_info))
+        random.shuffle(self._idx)
+
 
     def prepare(self, class_map=None):
         self.num_classes = 2
         self.class_ids = np.arange(self.num_classes)
         self.class_names = ['white','yellow']
-        self.num_images = len(self.image_info)
+        # self.num_images = len(self.image_info)
+        self.num_images = len(self.bin_list) * 10000
         self._image_ids = np.arange(self.num_images)
 
+
     def load_image(self, image_id):
-        img, c_id = self.image_info[image_id]
+        img, c_id = self.image_info[self._idx[self._k_image]]
+        self._k_image += 1
+        if self._k_image >= len(self._idx):
+            self._feed_buffer()
+            self._k_image = 0
         return img, c_id
 
 
@@ -391,6 +413,7 @@ class ResNet50(modellib.MaskRCNN):
 
         if mode == "training":
             x = KL.Dropout(rate=0.5)(P6)
+            # class_logits = KL.Dense(2, activation='softmax', name='class_logits')(x)
             class_logits = KL.Dense(2, name='class_logits')(x)
             class_loss = KL.Lambda(lambda x: class_loss_graph(*x), name="class_loss")(
                 [input_gt_class_ids, class_logits])
@@ -526,7 +549,7 @@ class ResNet50(modellib.MaskRCNN):
             assert g.shape == image_shape,\
                 "After resizing, all images must have the same size. Check IMAGE_RESIZE_MODE and image sizes."
 
-
+        molded_images = np.asarray(molded_images)
         if verbose:
             log("molded_images", molded_images)
         # Run object detection
@@ -534,7 +557,7 @@ class ResNet50(modellib.MaskRCNN):
         # Process detections
         results = []
         for i, image in enumerate(images):
-            results.append(y[i][1])
+            results.append(y[i][0][0][1])
         return results
 
     def compile(self, learning_rate, momentum):
@@ -763,3 +786,19 @@ if __name__ == '__main__':
     else:
         print("'{}' is not recognized. "
               "Use 'train' or 'evaluate'".format(args.command))
+
+
+# URL from which to download the latest COCO trained weights
+XHT_MODEL_URL = "https://github.com/TDteach/Mask_RCNN/releases/download/yellow/resnet50_yellow_v2.h5"
+
+def download_yellow_weights(xht_model_path, verbose=1):
+    """Download COCO trained weights from Releases.
+
+    coco_model_path: local path of COCO trained weights
+    """
+    if verbose > 0:
+        print("Downloading pretrained model to " + xht_model_path + " ...")
+    with urllib.request.urlopen(XHT_MODEL_URL) as resp, open(xht_model_path, 'wb') as out:
+        shutil.copyfileobj(resp, out)
+    if verbose > 0:
+        print("... done downloading pretrained model!")

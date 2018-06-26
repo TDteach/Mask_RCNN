@@ -69,7 +69,6 @@ class_names = ['BG', 'person', 'bicycle', 'car', 'motorcycle', 'airplane',
                'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors',
                'teddy bear', 'hair drier', 'toothbrush']
 
-root='/home/tdteach/data/thumbnails_features_deduped_publish/'
 
 import json
 def read_from_json(fname):
@@ -89,16 +88,25 @@ def write_to_bin(data, fname):
     bd = pickle.dumps(data)
     f.write(bd)
 
+person_thr = 0.90
+prefix = 'man_imgs.bin'
+root='/home/tdteach/data/thumbnails_features_deduped_publish/'
 folders = read_from_json('/home/tdteach/data/sexy.json')
-nf = 3
+#folders = os.listdir(root)
+nf = 0
 zz = 0
 data = dict()
 feed = []
 for fo in folders:
-    if folders[fo] == 'male':
-        print('male')
+    if '.' in fo:
+      continue
+    if folders[fo] == 'female':
+        print('female')
         continue
-    fo_path = os.path.join(root,fo)
+    try:
+      fo_path = os.path.join(root,fo)
+    except NotADirectoryError:
+      continue
     list_filenames = os.listdir(fo_path)
     for f in list_filenames:
         try:
@@ -112,8 +120,8 @@ for fo in folders:
                 continue
             #print(shape)
             zz += 1
-            # if (zz <= 15000):
-            #     continue
+            #if (zz <= 10000):
+            #    continue
             feed.append(img)
             if len(feed) == BATCH_SIZE:
               results = model.detect(feed, verbose=0)
@@ -124,7 +132,7 @@ for fo in folders:
                 roi = rst['rois']
                 masks = rst['masks']
                 for k in range(len(ty)):
-                  if ty[k] == 1 and sc[k] > 0.98:
+                  if ty[k] == 1 and sc[k] > person_thr:
                     img_st = np.zeros((128,128,4),dtype=np.float32)
                     cc = img[roi[k][0]:roi[k][2], roi[k][1]:roi[k][3]]
                     dd = skimage.transform.resize(cc,(128,128))
@@ -138,7 +146,7 @@ for fo in folders:
                     z = z+1
               feed = []
               if (zz%5000) == 0:
-                write_to_bin(data,('white_imgs.bin.%d' % (nf)))
+                write_to_bin(data,(prefix+'.%d' % (nf)))
                 nf += 1
                 data = dict()
         except OSError:
@@ -147,7 +155,7 @@ for fo in folders:
             pass
 
 if len(data) > 0:
-    write_to_bin(data,('yellow_imgs.bin.%d' % (nf)))
+    write_to_bin(data,(prefix+'.%d' % (nf)))
 
 
 '''
