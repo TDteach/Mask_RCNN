@@ -165,21 +165,46 @@ class XHTDataset(utils.Dataset):
     def load_xht(self, bin_list, subset):
         """Load a subset of the COCO dataset.
         dataset_dir: The root directory of the COCO dataset.
-    subset: What to load (train, val, minival, valminusminival)
+        subset: What to load (train, val, minival, valminusminival)
         """
-        for fn in bin_list:
-            data = read_from_bin(fn)
+        random.shuffle(bin_list)
+        self.bin_list = bin_list
+        self.k_bin = 0
+        self._feed_buffer()
+
+
+        # for fn in bin_list:
+        #     data = read_from_bin(fn)
+        #     self.image_info.extend(data)
+    def _feed_buffer(self):
+        self.image_info = []
+        while len(self.image_info) < 30000:
+            data = read_from_bin(self.bin_list[self.k_bin])
             self.image_info.extend(data)
+            self.k_bin += 1
+            if self.k_bin >= len(self.bin_list):
+                random.shuffle(self.bin_list)
+                self.k_bin = 0
+        self._k_image = 0
+        self._idx = np.arange(len(self.image_info))
+        random.shuffle(self._idx)
+
 
     def prepare(self, class_map=None):
         self.num_classes = 2
         self.class_ids = np.arange(self.num_classes)
         self.class_names = ['white','yellow']
-        self.num_images = len(self.image_info)
+        # self.num_images = len(self.image_info)
+        self.num_images = len(self.bin_list) * 10000
         self._image_ids = np.arange(self.num_images)
 
+
     def load_image(self, image_id):
-        img, c_id = self.image_info[image_id]
+        img, c_id = self.image_info[self._idx[self._k_image]]
+        self._k_image += 1
+        if self._k_image >= len(self._idx):
+            self._feed_buffer()
+            self._k_image = 0
         return img, c_id
 
 
