@@ -42,13 +42,13 @@ import logging
 import tensorflow as tf
 import keras
 import keras.backend as K
+import keras.layers as KL
+import keras.engine as KE
+import keras.models as KM
 tfconfig = tf.ConfigProto(allow_soft_placement=True)
 tfconfig.gpu_options.allow_growth = True
 sess = tf.Session(config=tfconfig)
 K.set_session(sess)
-import keras.layers as KL
-import keras.engine as KE
-import keras.models as KM
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
@@ -83,10 +83,10 @@ class XHTConfig(Config):
 
     # We use a GPU with 12GB memory, which can fit two images.
     # Adjust down if you use a smaller GPU.
-    IMAGES_PER_GPU = 32
+    IMAGES_PER_GPU = 64
 
     # Uncomment to train on 8 GPUs (default is 1)
-    # GPU_COUNT = 8
+    GPU_COUNT = 2
 
     # Number of classes (including background)
     NUM_CLASSES = 2  # XHT has 2 classes: white & yellow
@@ -171,6 +171,7 @@ class XHTDataset(utils.Dataset):
     subset: What to load (train, val, minival, valminusminival)
         """
         for fn in bin_list:
+            print('loading '+fn)
             data = read_from_bin(fn)
             self.image_info.extend(data)
 
@@ -339,6 +340,7 @@ def class_loss_graph(target_class_ids, pred_class_logits):
     # pred_class_ids = tf.argmax(pred_class_logits, axis=2)
 
     # Loss
+    print(pred_class_logits)
     y = tf.layers.flatten(pred_class_logits)
     loss = tf.nn.softmax_cross_entropy_with_logits(
         labels=target_class_ids, logits=y)
@@ -389,12 +391,12 @@ class ResNet50(modellib.MaskRCNN):
 
         if mode == "training":
             x = KL.Dropout(rate=0.5)(P6)
-            class_logits = KL.Dense(2, activation='softmax', name='class_logits')(x)
+            class_logits = KL.Dense(2, name='class_logits')(x)
             class_loss = KL.Lambda(lambda x: class_loss_graph(*x), name="class_loss")(
                 [input_gt_class_ids, class_logits])
-            model = KM.Model([input_image, input_gt_class_ids], [class_logits, class_loss], name='resnet50')
+            model = KM.Model([input_image, input_gt_class_ids], [class_loss], name='resnet50')
         else:
-            y = KL.Dense(2, activation='softmax')(P6)
+            y = KL.Dense(2, activation='softmax', name='class_logits')(P6)
             model = KM.Model([input_image], [y], name='resnet50')
 
 
@@ -478,6 +480,7 @@ class ResNet50(modellib.MaskRCNN):
             workers = 0
         else:
             workers = multiprocessing.cpu_count()
+            workers = 1
 
         self.config.STEPS_PER_EPOCH = train_dataset.num_images / self.config.BATCH_SIZE
 
@@ -491,7 +494,7 @@ class ResNet50(modellib.MaskRCNN):
             validation_steps=self.config.VALIDATION_STEPS,
             max_queue_size=100,
             workers=workers,
-            use_multiprocessing=True,
+            use_multiprocessing=False,
         )
         self.epoch = max(self.epoch, epochs)
 
@@ -715,7 +718,7 @@ if __name__ == '__main__':
             elif 'val' in fn:
                 vl_list.append(os.path.join(args.dataset,fn))
         dataset_train = XHTDataset()
-        dataset_train.load_xht(tr_list[:2], "train")
+        dataset_train.load_xht(tr_list, "train")
         dataset_train.prepare()
 
         # Validation dataset
