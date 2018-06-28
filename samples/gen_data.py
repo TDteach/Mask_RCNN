@@ -89,10 +89,10 @@ def write_to_bin(data, fname):
     f.write(bd)
 
 person_thr = 0.90
-prefix = 'man_imgs.bin'
-root='/home/tdteach/data/thumbnails_features_deduped_publish/'
-folders = read_from_json('/home/tdteach/data/sexy.json')
-#folders = os.listdir(root)
+prefix = 'fp001_imgs.bin'
+root='/home/tdteach/data/false_positives001/'
+#folders = read_from_json('/home/tdteach/data/sexy.json')
+folders = os.listdir(root)
 nf = 0
 zz = 0
 data = dict()
@@ -100,9 +100,9 @@ feed = []
 for fo in folders:
     if '.' in fo:
       continue
-    if folders[fo] == 'female':
-        print('female')
-        continue
+    #if folders[fo] == 'female':
+    #    print('female')
+    #    continue
     try:
       fo_path = os.path.join(root,fo)
     except NotADirectoryError:
