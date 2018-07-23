@@ -8,22 +8,34 @@ import skimage.transform
 import matplotlib
 import matplotlib.pyplot as plt
 import cv2
+import tensorflow as tf
+import keras.backend as K
+tfconfig = tf.ConfigProto(allow_soft_placement=True)
+tfconfig.gpu_options.allow_growth = True
+sess = tf.Session(config=tfconfig)
+K.set_session(sess)
+# K.set_session(sess)
+import keras.layers as KL
+import keras.engine as KE
+import keras.models as KM
 
+#
 
-BATCH_SIZE = 5
+BATCH_SIZE = 10
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../")
 
 # Import Mask RCNN
 sys.path.append(ROOT_DIR)  # To find local version of the library
+
+
 from mrcnn import utils
 import mrcnn.model as modellib
 from mrcnn import visualize
 # Import COCO config
-sys.path.append(os.path.join(ROOT_DIR, "samples/coco/"))  # To find local version
+sys.path.append(os.path.join(ROOT_DIR, "samples/coco/"))  # To find local version import coco 
 import coco
-
 #matplotlib inline
 
 # Directory to save logs and trained model
@@ -79,30 +91,34 @@ def read_from_json(fname):
 
 import pickle
 def read_from_bin(fname):
-  with open(fname,'rb') as f:
-    data = pickle.load(f)
-  return data
-
+  with open(fname,'rb') as f: 
+    data = pickle.load(f) 
+    return data 
 def write_to_bin(data, fname):
   with open(fname,'wb') as f:
     bd = pickle.dumps(data)
     f.write(bd)
 
 person_thr = 0.90
-prefix = 'man_imgs.bin'
-root='/home/tdteach/data/thumbnails_features_deduped_publish/'
-folders = read_from_json('/home/tdteach/data/sexy.json')
-#folders = os.listdir(root)
+prefix = '/home/public/tangdi/yellowset/fp003.imgs.bin'
+#root='/home/tdteach/data/thumbnails_features_deduped_publish/'
+root='/home/public/tangdi/yellowset_fp003/'
+#folders = read_from_json('/home/tdteach/data/sexy.json')
+folders = os.listdir(root)
 nf = 0
 zz = 0
 data = dict()
 feed = []
+fns = []
+rd_fn=[]
+rd_sc=[]
+rd_roi=[]
 for fo in folders:
     if '.' in fo:
       continue
-    if folders[fo] == 'female':
-        print('female')
-        continue
+    #if folders[fo] == 'female':
+    #    print('female')
+    #    continue
     try:
       fo_path = os.path.join(root,fo)
     except NotADirectoryError:
@@ -110,6 +126,8 @@ for fo in folders:
     list_filenames = os.listdir(fo_path)
     for f in list_filenames:
         try:
+            if 'jpeg' not in f:
+                continue
             nn = os.path.join(fo_path, f)
             print('%d : %s' %(zz, nn))
             img = skimage.io.imread(nn)
@@ -123,10 +141,11 @@ for fo in folders:
             #if (zz <= 10000):
             #    continue
             feed.append(img)
-            if len(feed) == BATCH_SIZE:
+            fns.append(nn)
+            if len(feed) == config.IMAGES_PER_GPU*config.GPU_COUNT:
               results = model.detect(feed, verbose=0)
               z = 0
-              for rst,img in zip(results,feed):
+              for rst,img,fn in zip(results,feed,fns):
                 ty = rst['class_ids']
                 sc = rst['scores']
                 roi = rst['rois']
@@ -142,9 +161,14 @@ for fo in folders:
                     img_st[:,:,3] = rs_mm
                     na = fo+('/%d_'%z)+f
                     data[na] = img_st
+                    #record.append([na, ty[k], roi[k]])
+                    rd_fn.append(na)
+                    rd_sc.append(ty[k])
+                    rd_roi.append(roi[k])
                     #skimage.io.imsave('/home/tdteach/data/yellowset/'+fo+('%d_' % z)+f,dd)
                     z = z+1
               feed = []
+              fns = []
               if (zz%5000) == 0:
                 write_to_bin(data,(prefix+'.%d' % (nf)))
                 nf += 1
@@ -155,7 +179,10 @@ for fo in folders:
             pass
 
 if len(data) > 0:
-    write_to_bin(data,(prefix+'.%d' % (nf)))
+    write_to_bin(data,(prefix+('.%d' % nf)))
+
+#save records
+np.savez(prefix+'.list', boxid=rd_fn, score=rd_sc, roi=rd_roi)
 
 
 '''
