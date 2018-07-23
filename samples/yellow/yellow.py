@@ -510,8 +510,7 @@ class ResNet50(modellib.MaskRCNN):
             keras.callbacks.ModelCheckpoint(self.checkpoint_path,
                                             verbose=0, save_weights_only=True),
         ]
-
-        # Train
+# Train
         modellib.log("\nStarting at epoch {}. LR={}\n".format(self.epoch, learning_rate))
         modellib.log("Checkpoint Path: {}".format(self.checkpoint_path))
         self.set_trainable(layers)
