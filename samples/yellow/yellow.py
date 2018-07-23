@@ -155,7 +155,7 @@ def log(text, array=None):
 
 import pickle
 def read_from_bin(fname):
-  #print('read data from '+fname)
+  print('read data from '+fname)
   with open(fname,'rb') as f:
     data = pickle.load(f)
   lb = 0
