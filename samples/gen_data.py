@@ -91,71 +91,113 @@ def write_to_bin(data, fname):
 person_thr = 0.90
 prefix = 'fp001_imgs.bin'
 root='/home/tdteach/data/false_positives001/'
-#folders = read_from_json('/home/tdteach/data/sexy.json')
 folders = os.listdir(root)
-nf = 0
-zz = 0
-data = dict()
-feed = []
-for fo in folders:
-    if '.' in fo:
-      continue
-    #if folders[fo] == 'female':
-    #    print('female')
-    #    continue
+
+from queue import Queue, Empty
+import threading
+
+DONE = False
+image_buffer = Queue(maxsize=5000)
+
+def load_image(filename):
     try:
-      fo_path = os.path.join(root,fo)
-    except NotADirectoryError:
-      continue
-    list_filenames = os.listdir(fo_path)
-    for f in list_filenames:
+        img = skimage.io.imread(filename)
+        if img is None:
+            return
+        shape = img.shape
+        if len(shape) != 3 or shape[0] < 10 or shape[1] < 10 or shape[2] != 3:
+            return
+        image_buffer.put((filename,img))
+    except OSError:
+        pass
+    except ValueError:
+        pass
+
+def travel_foldrs():
+    DONE=False
+    for fo in folders:
         try:
+            fo_path = os.path.join(root, fo)
+        except NotADirectoryError:
+            continue
+        list_filenames = os.listdir(fo_path)
+        for f in list_filenames:
             nn = os.path.join(fo_path, f)
-            print('%d : %s' %(zz, nn))
-            img = skimage.io.imread(nn)
-            if img is None:
-                continue
-            shape = img.shape
-            if len(shape) != 3 or shape[0] < 10 or shape[1] < 10 or shape[2] != 3:
-                continue
-            #print(shape)
-            zz += 1
-            #if (zz <= 10000):
-            #    continue
-            feed.append(img)
-            if len(feed) == BATCH_SIZE:
-              results = model.detect(feed, verbose=0)
-              z = 0
-              for rst,img in zip(results,feed):
+            load_image(nn)
+    DONE=True
+
+
+t1 = threading.Thread(target=travel_foldrs())
+t1.start()
+
+nf = 0
+data = dict()
+
+feed = []
+fd_fn = []
+
+n_rd = 0
+rd_ty = []
+rd_sc = []
+rd_roi = []
+rd_fn = []
+
+while not DONE:
+    try:
+        fn, img = image_buffer.get(timeout=1)
+        feed.append(img)
+        fd_fn.append(fn)
+        if len(feed) == BATCH_SIZE:
+            results = model.detect(feed, verbose=0)
+            for rst, img, fn in zip(results, feed, fd_fn):
                 ty = rst['class_ids']
                 sc = rst['scores']
                 roi = rst['rois']
                 masks = rst['masks']
+
+                rd_ty.append(ty)
+                rd_sc.append(sc)
+                rd_roi.append(roi)
+                rd_fn.append(fn)
+
+                if len(rd_fn) > 100000:
+                    np.savez(prefix+('.list.%d' % n_rd), filenames=rd_fn, classes=rd_ty, scores=rd_sc, rois=rd_roi)
+                    n_rd += 1
+                    rd_ty = []
+                    rd_sc = []
+                    rd_roi = []
+                    rd_fn = []
+
+
+                z = 0
                 for k in range(len(ty)):
-                  if ty[k] == 1 and sc[k] > person_thr:
-                    img_st = np.zeros((128,128,4),dtype=np.float32)
-                    cc = img[roi[k][0]:roi[k][2], roi[k][1]:roi[k][3]]
-                    dd = skimage.transform.resize(cc,(128,128))
-                    mm = masks[roi[k][0]:roi[k][2], roi[k][1]:roi[k][3], k]
-                    rs_mm = skimage.transform.resize(mm,(128,128))
-                    img_st[:,:,:3] = dd
-                    img_st[:,:,3] = rs_mm
-                    na = fo+('/%d_'%z)+f
-                    data[na] = img_st
-                    #skimage.io.imsave('/home/tdteach/data/yellowset/'+fo+('%d_' % z)+f,dd)
-                    z = z+1
-              feed = []
-              if (zz%5000) == 0:
-                write_to_bin(data,(prefix+'.%d' % (nf)))
+                    if ty[k] == 1 and sc[k] > person_thr:
+                        img_st = np.zeros((128, 128, 4), dtype=np.float32)
+                        cc = img[roi[k][0]:roi[k][2], roi[k][1]:roi[k][3]]
+                        dd = skimage.transform.resize(cc, (128, 128))
+                        mm = masks[roi[k][0]:roi[k][2], roi[k][1]:roi[k][3], k]
+                        rs_mm = skimage.transform.resize(mm, (128, 128))
+                        img_st[:, :, :3] = dd
+                        img_st[:, :, 3] = rs_mm
+                        na = ('%d_' % z) + fn
+                        data[na] = img_st
+                        # skimage.io.imsave('/home/tdteach/data/yellowset/'+fo+('%d_' % z)+f,dd)
+                    z = z + 1
+
+            feed = []
+            fd_fn = []
+            if len(data) >= 10000:
+                write_to_bin(data, (prefix + '.%d' % (nf)))
                 nf += 1
                 data = dict()
-        except OSError:
-            pass
-        except ValueError:
-            pass
+    except Empty:
+        pass
+
 
 if len(data) > 0:
     write_to_bin(data,(prefix+'.%d' % (nf)))
+if len(rd_fn) > 0:
+    np.savez(prefix + ('.list.%d' % n_rd), filenames=rd_fn, classes=rd_ty, scores=rd_sc, rois=rd_roi)
 
 
 '''
