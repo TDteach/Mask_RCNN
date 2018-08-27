@@ -22,20 +22,17 @@ import yellow
 config = yellow.XHTConfig()
 
 
-root = '/home/public/tangdi/yellow_predict/test/'
-prefix = '/home/public/tangdi/yellow_predict/test/tieba-all-fp003-poor.sclist'
+root = '/home/public/tangdi/yellowset/'
 
 
-save_length = 100000
 class InferenceConfig(config.__class__):
     # Run detection on one image at a time
-    GPU_COUNT = 2
+    GPU_COUNT = 1
     IMAGES_PER_GPU = 1000
 
 config = InferenceConfig()
 config.display()
 
-BATCH_SIZE = config.GPU_COUNT*config.IMAGES_PER_GPU
 
 
 
@@ -58,31 +55,34 @@ model.load_weights(weights_path, by_name=True)
 
 fn_list = os.listdir(root)
 feed = []
-fd_na = []
-rd_yw = []
-rd_na = []
-n_rd = 0
-for k in range(130+1):
-    fname = os.path.join(root,('tieba-all.bin.%d' % k))
+fd_gt = []
+
+gt_files = ['GT-porn.bin.0','GT-neg.bin.0']
+for f in gt_files:
+    fname = os.path.join(root,f)
     print(fname)
     data = read_from_bin(fname)
     for na, d in data.items():
         feed.append(d)
-        fd_na.append(na)
-        if len(feed) == BATCH_SIZE:
-            results = model.detect(feed, verbose=0)
-            for f_na, sc in zip(fd_na, results):
-                rd_na.append(f_na)
-                rd_yw.append(sc)
-            feed=[]
-            fd_na = []
-
-            if len(rd_yw) >= save_length:
-                np.savez(prefix + ('.%d' % n_rd), boxid=rd_na, yellow=rd_yw)
-                rd_yw = []
-                rd_na = []
-                n_rd += 1
+        if 'porn' in na:
+            fd_gt.append(1)
+        else:
+            fd_gt.append(0)
 
 
+results = model.detect(feed, verbose=0)
 
-np.savez(prefix + ('.%d' % n_rd), boxid=rd_na, yellow=rd_yw)
+from sklearn import metrics
+
+fpr, tpr, thr = metrics.roc_curve(fd_gt, results)
+
+import matplotlib.pyplot as plt
+
+plt.figure()
+plt.plot(fpr,tpr)
+plt.show()
+
+
+
+
+

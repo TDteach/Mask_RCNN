@@ -159,7 +159,7 @@ def read_from_bin(fname):
   with open(fname,'rb') as f:
     data = pickle.load(f)
   lb = 0
-  if 'yellow_imgs' in fname or 'porno_imgs' in fname:
+  if 'yellow_imgs' in fname or 'porn' in fname:
     lb = 1
   rst = []
   for n,d in data.items():
@@ -179,7 +179,9 @@ class XHTDataset(utils.Dataset):
         self.b_bin_list = []
         self.y_bin_list = []
         for b in bin_list:
-            if 'yellow_imgs' in b or 'porno_imgs' in b:
+            if 'fp003' in b:
+                continue
+            if 'yellow_imgs' in b or 'porn' in b:
                 self.y_bin_list.append(b)
             else:
                 self.b_bin_list.append(b)
@@ -550,7 +552,7 @@ class ResNet50(modellib.MaskRCNN):
         scores: [N] float probability scores for the class IDs
         """
         assert self.mode == "inference", "Create model in inference mode."
-        assert len(images) == self.config.BATCH_SIZE, "len(images) must be equal to BATCH_SIZE"
+        #assert len(images) == self.config.BATCH_SIZE, "len(images) must be equal to BATCH_SIZE"
 
         if verbose:
             log("Processing {} images".format(len(images)))

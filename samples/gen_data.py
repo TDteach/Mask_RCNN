@@ -21,7 +21,6 @@ import keras.models as KM
 
 #
 
-BATCH_SIZE = 10
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../")
@@ -53,11 +52,15 @@ IMAGE_DIR = os.path.join(ROOT_DIR, "images")
 class InferenceConfig(coco.CocoConfig):
     # Set batch size to 1 since we'll be running inference on
     # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
-    GPU_COUNT = 1
-    IMAGES_PER_GPU = BATCH_SIZE
+    GPU_COUNT = 2
+    IMAGES_PER_GPU = 1
+
+
 
 config = InferenceConfig()
 config.display()
+
+BATCH_SIZE = config.GPU_COUNT*config.IMAGES_PER_GPU
 
 # Create model object in inference mode.
 model = modellib.MaskRCNN(mode="inference", model_dir=MODEL_DIR, config=config)
@@ -100,69 +103,100 @@ def write_to_bin(data, fname):
     f.write(bd)
 
 person_thr = 0.90
-prefix = '/home/public/tangdi/yellowset/fp003.imgs.bin'
+prefix = '/home/public/tangdi/yellowset/GT-neg'
 #root='/home/tdteach/data/thumbnails_features_deduped_publish/'
-root='/home/public/tangdi/yellowset_fp003/'
+root='/home/public/tangdi/ground_truth'
 #folders = read_from_json('/home/tdteach/data/sexy.json')
 folders = os.listdir(root)
 
-from queue import Queue, Empty
+from queue import Queue, Empty, Full
 import threading
+import time
 
 DONE = False
-image_buffer = Queue(maxsize=5000)
+image_buffer = Queue(maxsize=100)
+out_buffer = Queue(maxsize=100)
 
-def load_image(filename):
-    try:
+class MyThread(threading.Thread):
+    def __init__(self, qu):
+        threading.Thread.__init__(self)
+        self.qu = qu
+        self.bf = []
+        self.fn = []
+
+    def load_image(self, filename):
+      try:
+        print('loading '+filename)
         img = skimage.io.imread(filename)
         if img is None:
             return
         shape = img.shape
         if len(shape) != 3 or shape[0] < 10 or shape[1] < 10 or shape[2] != 3:
             return
-        image_buffer.put((filename,img))
-    except OSError:
+        #self.qu.put((filename,img))
+        self.bf.append(img)
+        self.fn.append(filename)
+        if len(self.fn) == BATCH_SIZE:
+          self.qu.put((self.fn, self.bf))
+          self.bf = []
+          self.fn = []
+          print('len %d\n' % (self.qu.qsize()*BATCH_SIZE))
+      except OSError:
         pass
-    except ValueError:
+      except ValueError:
         pass
 
-def travel_foldrs():
-    DONE=False
-    for fo in folders:
+    def run(self):
+      global DONE
+      DONE=False
+      zz = 0
+      for fo in folders:
+        if '.py' in fo or '.tar.gz' in fo:
+          continue
+        if 'positive' in fo:
+          continue
         try:
             fo_path = os.path.join(root, fo)
+            #fo_path = os.path.join(fo_path, 'noisy')
+            list_filenames = os.listdir(fo_path)
         except NotADirectoryError:
+            print('Not a directory')
             continue
-        list_filenames = os.listdir(fo_path)
         for f in list_filenames:
+            zz += 1
+            #if zz < 380000:
+            #    continue
             nn = os.path.join(fo_path, f)
-            load_image(nn)
-    DONE=True
+            if '.gif' in nn:
+                continue
+            if '.jpeg' in nn or '.png' in nn or '.jpg' in nn:
+                self.load_image(nn)
+      DONE=True
 
 
-t1 = threading.Thread(target=travel_foldrs())
-t1.start()
+class OutThread(threading.Thread):
+    def __init__(self, qu):
+        threading.Thread.__init__(self)
+        self.qu = qu
+    def run(self):
+        nf = 0 # num of bin files
+        data = dict()
 
-nf = 0
-data = dict()
+        n_rd = 0 # num of record files
+        rd_ty = []
+        rd_sc = []
+        rd_roi = []
+        rd_fn = []
 
-feed = []
-fd_fn = []
+        kk = 0
 
-n_rd = 0
-rd_ty = []
-rd_sc = []
-rd_roi = []
-rd_fn = []
-
-while not DONE:
-    try:
-        fn, img = image_buffer.get(timeout=1)
-        feed.append(img)
-        fd_fn.append(fn)
-        if len(feed) == BATCH_SIZE:
-            results = model.detect(feed, verbose=0)
-            for rst, img, fn in zip(results, feed, fd_fn):
+        while (not DONE) or (not self.qu.empty()):
+            try:
+              rsts, imgs, fns = self.qu.get(timeout=0.001)
+              kk += 1
+              print('done %d images' % (kk*BATCH_SIZE))
+              for rst, img, fn in zip(rsts, imgs, fns):
+                #print('dealing '+fn)
                 ty = rst['class_ids']
                 sc = rst['scores']
                 roi = rst['rois']
@@ -173,7 +207,7 @@ while not DONE:
                 rd_roi.append(roi)
                 rd_fn.append(fn)
 
-                if len(rd_fn) > 100000:
+                if len(rd_fn) >= 20000:
                     np.savez(prefix+('.list.%d' % n_rd), filenames=rd_fn, classes=rd_ty, scores=rd_sc, rois=rd_roi)
                     n_rd += 1
                     rd_ty = []
@@ -197,20 +231,42 @@ while not DONE:
                         # skimage.io.imsave('/home/tdteach/data/yellowset/'+fo+('%d_' % z)+f,dd)
                     z = z + 1
 
-            feed = []
-            fd_fn = []
-            if len(data) >= 10000:
-                write_to_bin(data, (prefix + '.%d' % (nf)))
-                nf += 1
-                data = dict()
+                if len(data) >= 10000:
+                    write_to_bin(data, (prefix + '.bin.%d' % (nf)))
+                    nf += 1
+                    data = dict()
+            except Empty:
+                print('out_buffer empty')
+                time.sleep(120)
+                pass
+        if len(data) > 0:
+            write_to_bin(data,(prefix+'.bin.%d' % (nf)))
+        if len(rd_fn) > 0:
+            np.savez(prefix + ('.list.%d' % n_rd), filenames=rd_fn, classes=rd_ty, scores=rd_sc, rois=rd_roi)
+
+
+
+
+t1 = MyThread(image_buffer)
+t1.start()
+
+t2 = OutThread(out_buffer)
+t2.start()
+
+
+zz = 0
+while not DONE or not image_buffer.empty():
+    try:
+        fd_fn, feed = image_buffer.get(timeout=0.001)
+        print('deal %d-%d images' % (zz*BATCH_SIZE, (zz+1)*BATCH_SIZE-1))
+        zz += 1
+        results = model.detect(feed, verbose=0)
+        out_buffer.put((results, feed, fd_fn))
     except Empty:
+        print('image_bufer empty')
+        time.sleep(10)
         pass
 
-
-if len(data) > 0:
-    write_to_bin(data,(prefix+'.%d' % (nf)))
-if len(rd_fn) > 0:
-    np.savez(prefix + ('.list.%d' % n_rd), filenames=rd_fn, classes=rd_ty, scores=rd_sc, rois=rd_roi)
 
 
 '''
