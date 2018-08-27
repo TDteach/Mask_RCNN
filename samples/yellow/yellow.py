@@ -42,6 +42,7 @@ import keras.backend as K
 tfconfig = tf.ConfigProto(allow_soft_placement=True)
 tfconfig.gpu_options.allow_growth = True
 sess = tf.Session(config=tfconfig)
+K.set_session(sess)
 # K.set_session(sess)
 import keras.layers as KL
 import keras.engine as KE
@@ -80,10 +81,10 @@ class XHTConfig(Config):
 
     # We use a GPU with 12GB memory, which can fit two images.
     # Adjust down if you use a smaller GPU.
-    IMAGES_PER_GPU = 1
+    IMAGES_PER_GPU = 64
 
     # Uncomment to train on 8 GPUs (default is 1)
-    GPU_COUNT = 1
+    GPU_COUNT = 2
 
     # Number of classes (including background)
     NUM_CLASSES = 2  # XHT has 2 classes: white & yellow
@@ -154,9 +155,16 @@ def log(text, array=None):
 
 import pickle
 def read_from_bin(fname):
+  print('read data from '+fname)
   with open(fname,'rb') as f:
     data = pickle.load(f)
-  return data
+  lb = 0
+  if 'yellow_imgs' in fname or 'porno_imgs' in fname:
+    lb = 1
+  rst = []
+  for n,d in data.items():
+    rst.append((d,lb))
+  return rst
 
 ############################################################
 #  Dataset
@@ -167,8 +175,20 @@ class XHTDataset(utils.Dataset):
         dataset_dir: The root directory of the COCO dataset.
         subset: What to load (train, val, minival, valminusminival)
         """
-        random.shuffle(bin_list)
-        self.bin_list = bin_list
+
+        self.b_bin_list = []
+        self.y_bin_list = []
+        for b in bin_list:
+            if 'yellow_imgs' in b or 'porno_imgs' in b:
+                self.y_bin_list.append(b)
+            else:
+                self.b_bin_list.append(b)
+
+        self.len_b = len(self.b_bin_list)
+        self.len_y = len(self.y_bin_list)
+
+        random.shuffle(self.b_bin_list)
+        random.shuffle(self.y_bin_list)
         self.k_bin = 0
         self._feed_buffer()
 
@@ -179,12 +199,15 @@ class XHTDataset(utils.Dataset):
     def _feed_buffer(self):
         self.image_info = []
         while len(self.image_info) < 30000:
-            data = read_from_bin(self.bin_list[self.k_bin])
+            data = read_from_bin(self.b_bin_list[self.k_bin%self.len_b])
+            self.image_info.extend(data)
+            data = read_from_bin(self.y_bin_list[self.k_bin%self.len_y])
             self.image_info.extend(data)
             self.k_bin += 1
-            if self.k_bin >= len(self.bin_list):
-                random.shuffle(self.bin_list)
-                self.k_bin = 0
+            if (self.k_bin%self.len_b) == 0:
+                random.shuffle(self.b_bin_list)
+            if (self.k_bin%self.len_y) == 0:
+                random.shuffle(self.y_bin_list)
         self._k_image = 0
         self._idx = np.arange(len(self.image_info))
         random.shuffle(self._idx)
@@ -195,7 +218,7 @@ class XHTDataset(utils.Dataset):
         self.class_ids = np.arange(self.num_classes)
         self.class_names = ['white','yellow']
         # self.num_images = len(self.image_info)
-        self.num_images = len(self.bin_list) * 10000
+        self.num_images = (self.len_b+self.len_y) * 5000
         self._image_ids = np.arange(self.num_images)
 
 
@@ -204,7 +227,6 @@ class XHTDataset(utils.Dataset):
         self._k_image += 1
         if self._k_image >= len(self._idx):
             self._feed_buffer()
-            self._k_image = 0
         return img, c_id
 
 
@@ -361,6 +383,7 @@ def class_loss_graph(target_class_ids, pred_class_logits):
     # pred_class_ids = tf.argmax(pred_class_logits, axis=2)
 
     # Loss
+    print(pred_class_logits)
     y = tf.layers.flatten(pred_class_logits)
     loss = tf.nn.softmax_cross_entropy_with_logits(
         labels=target_class_ids, logits=y)
@@ -487,8 +510,7 @@ class ResNet50(modellib.MaskRCNN):
             keras.callbacks.ModelCheckpoint(self.checkpoint_path,
                                             verbose=0, save_weights_only=True),
         ]
-
-        # Train
+# Train
         modellib.log("\nStarting at epoch {}. LR={}\n".format(self.epoch, learning_rate))
         modellib.log("Checkpoint Path: {}".format(self.checkpoint_path))
         self.set_trainable(layers)
@@ -501,6 +523,7 @@ class ResNet50(modellib.MaskRCNN):
             workers = 0
         else:
             workers = multiprocessing.cpu_count()
+            workers = 2
 
         self.config.STEPS_PER_EPOCH = train_dataset.num_images / self.config.BATCH_SIZE
 
@@ -732,13 +755,23 @@ if __name__ == '__main__':
         fn_list = os.listdir(args.dataset)
         tr_list = []
         vl_list = []
+
+
+
+        for fn in fn_list:
+            tr_list.append(os.path.join(args.dataset,fn))
+        vl_list.append(tr_list[3])
+        vl_list.append(tr_list[0])
+
+        '''
         for fn in fn_list:
             if 'train' in fn:
                 tr_list.append(os.path.join(args.dataset,fn))
             elif 'val' in fn:
                 vl_list.append(os.path.join(args.dataset,fn))
+        '''
         dataset_train = XHTDataset()
-        dataset_train.load_xht(tr_list[:2], "train")
+        dataset_train.load_xht(tr_list, "train")
         dataset_train.prepare()
 
         # Validation dataset
@@ -786,7 +819,7 @@ if __name__ == '__main__':
 
 
 # URL from which to download the latest COCO trained weights
-XHT_MODEL_URL = "https://github.com/TDteach/Mask_RCNN/releases/download/yellow/resnet50_yellow_fp001.h5"
+XHT_MODEL_URL = "https://github.com/TDteach/Mask_RCNN/releases/download/yellow/resnet50_yellow_v2.h5"
 
 def download_yellow_weights(xht_model_path, verbose=1):
     """Download COCO trained weights from Releases.

@@ -8,22 +8,34 @@ import skimage.transform
 import matplotlib
 import matplotlib.pyplot as plt
 import cv2
+import tensorflow as tf
+import keras.backend as K
+tfconfig = tf.ConfigProto(allow_soft_placement=True)
+tfconfig.gpu_options.allow_growth = True
+sess = tf.Session(config=tfconfig)
+K.set_session(sess)
+# K.set_session(sess)
+import keras.layers as KL
+import keras.engine as KE
+import keras.models as KM
 
+#
 
-BATCH_SIZE = 5
+BATCH_SIZE = 10
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../")
 
 # Import Mask RCNN
 sys.path.append(ROOT_DIR)  # To find local version of the library
+
+
 from mrcnn import utils
 import mrcnn.model as modellib
 from mrcnn import visualize
 # Import COCO config
-sys.path.append(os.path.join(ROOT_DIR, "samples/coco/"))  # To find local version
+sys.path.append(os.path.join(ROOT_DIR, "samples/coco/"))  # To find local version import coco
 import coco
-
 #matplotlib inline
 
 # Directory to save logs and trained model
@@ -81,16 +93,17 @@ import pickle
 def read_from_bin(fname):
   with open(fname,'rb') as f:
     data = pickle.load(f)
-  return data
-
+    return data
 def write_to_bin(data, fname):
   with open(fname,'wb') as f:
     bd = pickle.dumps(data)
     f.write(bd)
 
 person_thr = 0.90
-prefix = 'fp001_imgs.bin'
-root='/home/tdteach/data/false_positives001/'
+prefix = '/home/public/tangdi/yellowset/fp003.imgs.bin'
+#root='/home/tdteach/data/thumbnails_features_deduped_publish/'
+root='/home/public/tangdi/yellowset_fp003/'
+#folders = read_from_json('/home/tdteach/data/sexy.json')
 folders = os.listdir(root)
 
 from queue import Queue, Empty

@@ -22,7 +22,7 @@ import shutil
 import warnings
 
 # URL from which to download the latest COCO trained weights
-COCO_MODEL_URL = "https://github.com/matterport/Mask_RCNN/releases/download/v2.0/mask_rcnn_coco.h5"
+COCO_MODEL_URL = "https://github.com/TDteach/Mask_RCNN/releases/download/yellow/mask_rcnn_coco.h5"
 
 
 ############################################################

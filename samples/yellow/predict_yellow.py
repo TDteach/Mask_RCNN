@@ -22,14 +22,15 @@ import yellow
 config = yellow.XHTConfig()
 
 
-root = '/home/tangdi/data/yellow_predict/'
-prefix = '/home/tangdi/data/yellow_predict/yw_score'
+root = '/home/public/tangdi/yellow_predict/mrcnn_rst/'
+prefix = '/home/public/tangdi/yellow_predict/mrcnn_rst/tieba-all.sclist'
 
 
+save_length = 100000
 class InferenceConfig(config.__class__):
     # Run detection on one image at a time
     GPU_COUNT = 2
-    IMAGES_PER_GPU = 10
+    IMAGES_PER_GPU = 1000
 
 config = InferenceConfig()
 config.display()
@@ -57,23 +58,31 @@ model.load_weights(weights_path, by_name=True)
 
 fn_list = os.listdir(root)
 feed = []
+fd_na = []
 rd_yw = []
+rd_na = []
 n_rd = 0
-for fname in fn_list:
+for k in range(405):
+    fname = os.path.join(root,('tieba-all.bin.%d' % k))
+    print(fname)
     data = read_from_bin(fname)
-    for d in data:
+    for na, d in data.items():
         feed.append(d)
+        fd_na.append(na)
         if len(feed) == BATCH_SIZE:
             results = model.detect(feed, verbose=0)
-            for sc in results:
+            for f_na, sc in zip(fd_na, results):
+                rd_na.append(f_na)
                 rd_yw.append(sc)
             feed=[]
+            fd_na = []
 
-            if len(rd_yw) >= 10000:
-                np.save(prefix + ('.%d' % n_rd), rd_yw)
+            if len(rd_yw) >= save_length:
+                np.savez(prefix + ('.%d' % n_rd), boxid=rd_na, yellow=rd_yw)
                 rd_yw = []
+                rd_na = []
                 n_rd += 1
 
 
 
-np.save(prefix + ('.%d' % n_rd), rd_yw)
+np.savez(prefix + ('.%d' % n_rd), boxid=rd_na, yellow=rd_yw)
